@@ -11,6 +11,8 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production
+ENV MCP_TRANSPORT=streamable-http
+ENV MCP_HOST=0.0.0.0
 
 COPY package*.json ./
 RUN npm ci --omit=dev

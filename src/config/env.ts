@@ -84,8 +84,32 @@ function optionalTokensJson(): string | undefined {
   return value && value !== "" ? value : undefined;
 }
 
+function isPlatformDeploy(): boolean {
+  return Boolean(process.env.PORT?.trim());
+}
+
+function resolveTransport(explicit: string | undefined): McpTransport {
+  if (explicit && explicit.trim() !== "") {
+    return parseTransport(explicit.trim());
+  }
+  if (isPlatformDeploy()) {
+    return "streamable-http";
+  }
+  return "stdio";
+}
+
+function resolveHost(explicit: string | undefined): string {
+  if (explicit && explicit.trim() !== "") {
+    return explicit.trim();
+  }
+  if (isPlatformDeploy()) {
+    return "0.0.0.0";
+  }
+  return "127.0.0.1";
+}
+
 export function loadConfig(): Config {
-  const transport = parseTransport(optionalEnv("MCP_TRANSPORT", "stdio"));
+  const transport = resolveTransport(process.env.MCP_TRANSPORT);
   const tokensJson = optionalTokensJson();
 
   return {
@@ -98,7 +122,7 @@ export function loadConfig(): Config {
     },
     mcp: {
       transport,
-      host: optionalEnv("MCP_HOST", "127.0.0.1"),
+      host: resolveHost(process.env.MCP_HOST),
       port: resolveMcpPort(),
     },
     logging: {

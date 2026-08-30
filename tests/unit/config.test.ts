@@ -61,6 +61,24 @@ describe("loadConfig", () => {
     process.env = original;
   });
 
+  it("defaults to streamable-http and 0.0.0.0 when PORT is set", () => {
+    const original = { ...process.env };
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    process.env.GOOGLE_REDIRECT_URI = "http://localhost:3000/callback";
+    delete process.env.MCP_TRANSPORT;
+    delete process.env.MCP_HOST;
+    delete process.env.MCP_PORT;
+    process.env.PORT = "8080";
+
+    const config = loadConfig();
+    expect(config.mcp.transport).toBe("streamable-http");
+    expect(config.mcp.host).toBe("0.0.0.0");
+    expect(config.mcp.port).toBe(8080);
+
+    process.env = original;
+  });
+
   it("loads GOOGLE_TOKENS_JSON when set", () => {
     const original = { ...process.env };
     process.env.GOOGLE_CLIENT_ID = "test-client-id";
