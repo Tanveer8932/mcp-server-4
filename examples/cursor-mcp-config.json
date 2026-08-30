@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-server-4/dist/index.js"],
+      "env": {
+        "GOOGLE_CLIENT_ID": "your-client-id",
+        "GOOGLE_CLIENT_SECRET": "your-client-secret",
+        "GOOGLE_REDIRECT_URI": "http://localhost:3000/oauth/callback",
+        "GOOGLE_TOKEN_STORE_PATH": "/absolute/path/to/mcp-server-4/tokens.json",
+        "MCP_TRANSPORT": "stdio",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
