@@ -16,8 +16,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 
-# Token store should be mounted at runtime (Railway Volume at /data)
-VOLUME ["/data"]
+# Mount a Railway Volume at /data in the service settings (not via Dockerfile VOLUME)
 ENV GOOGLE_TOKEN_STORE_PATH=/data/tokens.json
 
 CMD ["node", "dist/index.js"]
