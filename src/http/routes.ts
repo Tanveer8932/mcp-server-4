@@ -10,6 +10,19 @@ export function handleHealth(): Response {
   return Response.json({ status: "ok" });
 }
 
+export function handleRoot(): Response {
+  return Response.json({
+    service: "google-workspace-mcp-server",
+    status: "running",
+    endpoints: {
+      health: "/health",
+      oauthStart: "/oauth/start",
+      oauthCallback: "/oauth/callback",
+      mcp: "/",
+    },
+  });
+}
+
 export function handleOAuthStart(config: Config): Response {
   const oauth2Client = createOAuth2Client(config.google);
   const authUrl = getAuthUrl(oauth2Client);
@@ -49,6 +62,10 @@ export async function handleHttpRoute(
 ): Promise<Response | null> {
   if (method === "GET" && url.pathname === "/health") {
     return handleHealth();
+  }
+
+  if (method === "GET" && (url.pathname === "/" || url.pathname === "")) {
+    return handleRoot();
   }
 
   if (method === "GET" && url.pathname === "/oauth/start") {

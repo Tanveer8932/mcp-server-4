@@ -6,7 +6,9 @@ import {
   type PayloadLimits,
 } from "./limits.js";
 
-loadDotenv();
+if (process.env.NODE_ENV !== "production") {
+  loadDotenv();
+}
 
 export type McpTransport = "stdio" | "streamable-http";
 
@@ -66,14 +68,13 @@ function parseLogLevel(value: string): Config["logging"]["level"] {
 }
 
 function resolveMcpPort(): number {
+  if (isPlatformDeploy()) {
+    return parsePositiveInt(process.env.PORT!.trim(), "PORT");
+  }
+
   const mcpPort = process.env.MCP_PORT?.trim();
   if (mcpPort) {
     return parsePositiveInt(mcpPort, "MCP_PORT");
-  }
-
-  const platformPort = process.env.PORT?.trim();
-  if (platformPort) {
-    return parsePositiveInt(platformPort, "PORT");
   }
 
   return 3000;
@@ -88,28 +89,34 @@ function isPlatformDeploy(): boolean {
   return Boolean(process.env.PORT?.trim());
 }
 
-function resolveTransport(explicit: string | undefined): McpTransport {
-  if (explicit && explicit.trim() !== "") {
-    return parseTransport(explicit.trim());
-  }
+function resolveTransport(): McpTransport {
   if (isPlatformDeploy()) {
     return "streamable-http";
   }
+
+  const explicit = process.env.MCP_TRANSPORT?.trim();
+  if (explicit) {
+    return parseTransport(explicit);
+  }
+
   return "stdio";
 }
 
-function resolveHost(explicit: string | undefined): string {
-  if (explicit && explicit.trim() !== "") {
-    return explicit.trim();
-  }
+function resolveHost(): string {
   if (isPlatformDeploy()) {
     return "0.0.0.0";
   }
+
+  const explicit = process.env.MCP_HOST?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
   return "127.0.0.1";
 }
 
 export function loadConfig(): Config {
-  const transport = resolveTransport(process.env.MCP_TRANSPORT);
+  const transport = resolveTransport();
   const tokensJson = optionalTokensJson();
 
   return {
@@ -122,7 +129,7 @@ export function loadConfig(): Config {
     },
     mcp: {
       transport,
-      host: resolveHost(process.env.MCP_HOST),
+      host: resolveHost(),
       port: resolveMcpPort(),
     },
     logging: {

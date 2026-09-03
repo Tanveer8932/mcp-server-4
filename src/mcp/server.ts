@@ -42,41 +42,52 @@ export async function startHttpServer(config: Config): Promise<void> {
   const handler = createMcpHandler(() => createMcpServerInstance(config));
 
   const httpServer = createHttpServer(async (req, res) => {
-    const host = config.mcp.host;
-    const port = config.mcp.port;
-    const url = new URL(req.url ?? "/", `http://${host}:${port}`);
+    try {
+      const host = config.mcp.host;
+      const port = config.mcp.port;
+      const url = new URL(req.url ?? "/", `http://${host}:${port}`);
 
-    const routeResponse = await handleHttpRoute(
-      req.method ?? "GET",
-      url,
-      config,
-      tokenStore,
-    );
-    if (routeResponse) {
-      await writeNodeResponse(res, routeResponse);
-      return;
-    }
+      const routeResponse = await handleHttpRoute(
+        req.method ?? "GET",
+        url,
+        config,
+        tokenStore,
+      );
+      if (routeResponse) {
+        await writeNodeResponse(res, routeResponse);
+        return;
+      }
 
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (value !== undefined) {
-        headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value !== undefined) {
+          headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+        }
+      }
+
+      const body =
+        req.method === "GET" || req.method === "HEAD"
+          ? undefined
+          : await readRequestBody(req);
+
+      const request = new Request(url.toString(), {
+        method: req.method,
+        headers,
+        body: body as BodyInit | undefined,
+      });
+
+      const response = await handler.fetch(request);
+      await writeNodeResponse(res, response);
+    } catch (error) {
+      logger.error("HTTP request failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "Internal server error" }));
       }
     }
-
-    const body =
-      req.method === "GET" || req.method === "HEAD"
-        ? undefined
-        : await readRequestBody(req);
-
-    const request = new Request(url.toString(), {
-      method: req.method,
-      headers,
-      body: body as BodyInit | undefined,
-    });
-
-    const response = await handler.fetch(request);
-    await writeNodeResponse(res, response);
   });
 
   await new Promise<void>((resolve) => {

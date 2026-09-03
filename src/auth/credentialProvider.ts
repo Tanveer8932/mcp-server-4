@@ -35,7 +35,12 @@ export class DefaultCredentialProvider implements CredentialProvider {
 
 export function createTokenStore(google: Config["google"]): TokenStore {
   if (google.tokensJson) {
-    return new EnvTokenStore(google.tokensJson);
+    try {
+      return new EnvTokenStore(google.tokensJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid GOOGLE_TOKENS_JSON: ${message}`);
+    }
   }
   return new FileTokenStore(google.tokenStorePath);
 }
