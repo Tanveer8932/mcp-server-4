@@ -5,12 +5,23 @@ import {
   createPayloadLimits,
   type PayloadLimits,
 } from "./limits.js";
+import { parseEnabledTools, type ToolName } from "./tools.js";
+import { parseTokenHashes } from "../http/auth.js";
 
 if (process.env.NODE_ENV !== "production") {
   loadDotenv();
 }
 
 export type McpTransport = "stdio" | "streamable-http";
+
+export type OAuthRoutesConfig =
+  | { enabled: false }
+  | {
+      enabled: true;
+      adminTokenHashes: string[];
+      stateSecret: string;
+      allowedGoogleAccount: string;
+    };
 
 export type Config = {
   google: {
@@ -24,6 +35,12 @@ export type Config = {
     transport: McpTransport;
     host: string;
     port: number;
+    /** SHA-256 hex hashes of accepted MCP bearer tokens. Required for streamable-http. */
+    authTokenHashes: string[];
+  };
+  oauthRoutes: OAuthRoutesConfig;
+  tools: {
+    enabled: ToolName[];
   };
   logging: {
     level: "debug" | "info" | "warn" | "error";
@@ -115,6 +132,53 @@ function resolveHost(): string {
   return "127.0.0.1";
 }
 
+function parseBoolean(value: string, name: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes"].includes(normalized)) {
+    return true;
+  }
+  if (["false", "0", "no"].includes(normalized)) {
+    return false;
+  }
+  throw new Error(`Invalid ${name}: expected true or false`);
+}
+
+const MIN_STATE_SECRET_LENGTH = 32;
+
+function resolveAuthTokenHashes(transport: McpTransport): string[] {
+  const hashes = parseTokenHashes(process.env.MCP_AUTH_TOKEN_SHA256, "MCP_AUTH_TOKEN_SHA256");
+  if (transport === "streamable-http" && hashes.length === 0) {
+    throw new Error(
+      "Missing required environment variable: MCP_AUTH_TOKEN_SHA256 (required for streamable-http). " +
+        "Generate one with `npm run auth:token`.",
+    );
+  }
+  return hashes;
+}
+
+function resolveOAuthRoutes(): OAuthRoutesConfig {
+  if (!parseBoolean(optionalEnv("ENABLE_OAUTH_ROUTES", "false"), "ENABLE_OAUTH_ROUTES")) {
+    return { enabled: false };
+  }
+
+  const adminTokenHashes = parseTokenHashes(
+    requireEnv("OAUTH_ADMIN_TOKEN_SHA256"),
+    "OAUTH_ADMIN_TOKEN_SHA256",
+  );
+  const stateSecret = requireEnv("OAUTH_STATE_SECRET");
+  if (stateSecret.length < MIN_STATE_SECRET_LENGTH) {
+    throw new Error(
+      `Invalid OAUTH_STATE_SECRET: must be at least ${MIN_STATE_SECRET_LENGTH} characters`,
+    );
+  }
+  const allowedGoogleAccount = requireEnv("ALLOWED_GOOGLE_ACCOUNT").toLowerCase();
+  if (!allowedGoogleAccount.includes("@")) {
+    throw new Error("Invalid ALLOWED_GOOGLE_ACCOUNT: expected an email address");
+  }
+
+  return { enabled: true, adminTokenHashes, stateSecret, allowedGoogleAccount };
+}
+
 export function loadConfig(): Config {
   const transport = resolveTransport();
   const tokensJson = optionalTokensJson();
@@ -131,6 +195,11 @@ export function loadConfig(): Config {
       transport,
       host: resolveHost(),
       port: resolveMcpPort(),
+      authTokenHashes: resolveAuthTokenHashes(transport),
+    },
+    oauthRoutes: resolveOAuthRoutes(),
+    tools: {
+      enabled: parseEnabledTools(process.env.ENABLED_TOOLS),
     },
     logging: {
       level: parseLogLevel(optionalEnv("LOG_LEVEL", "info")),

@@ -4,6 +4,9 @@ import { createTokenStore } from "../../src/auth/credentialProvider.js";
 import { handleHealth, handleHttpRoute } from "../../src/http/routes.js";
 import type { Config } from "../../src/config/env.js";
 import { loadConfig } from "../../src/config/env.js";
+import { hashToken } from "../../src/http/auth.js";
+
+const TEST_TOKEN_HASH = hashToken("test-token");
 
 describe("loadConfig", () => {
   it("throws when required Google env vars are missing", () => {
@@ -40,6 +43,7 @@ describe("loadConfig", () => {
     process.env.GOOGLE_REDIRECT_URI = "http://localhost:3000/callback";
     delete process.env.MCP_PORT;
     process.env.PORT = "8080";
+    process.env.MCP_AUTH_TOKEN_SHA256 = TEST_TOKEN_HASH;
 
     const config = loadConfig();
     expect(config.mcp.port).toBe(8080);
@@ -54,6 +58,7 @@ describe("loadConfig", () => {
     process.env.GOOGLE_REDIRECT_URI = "http://localhost:3000/callback";
     process.env.MCP_PORT = "4000";
     process.env.PORT = "8080";
+    process.env.MCP_AUTH_TOKEN_SHA256 = TEST_TOKEN_HASH;
 
     const config = loadConfig();
     expect(config.mcp.port).toBe(8080);
@@ -69,6 +74,7 @@ describe("loadConfig", () => {
     process.env.MCP_TRANSPORT = "stdio";
     process.env.MCP_HOST = "127.0.0.1";
     process.env.PORT = "8080";
+    process.env.MCP_AUTH_TOKEN_SHA256 = TEST_TOKEN_HASH;
 
     const config = loadConfig();
     expect(config.mcp.transport).toBe("streamable-http");
@@ -87,6 +93,7 @@ describe("loadConfig", () => {
     delete process.env.MCP_HOST;
     delete process.env.MCP_PORT;
     process.env.PORT = "8080";
+    process.env.MCP_AUTH_TOKEN_SHA256 = TEST_TOKEN_HASH;
 
     const config = loadConfig();
     expect(config.mcp.transport).toBe("streamable-http");
@@ -179,7 +186,10 @@ describe("HTTP routes", () => {
       transport: "streamable-http",
       host: "127.0.0.1",
       port: 3000,
+      authTokenHashes: [TEST_TOKEN_HASH],
     },
+    oauthRoutes: { enabled: false },
+    tools: { enabled: ["gmail_create_draft", "google_docs_append_content"] },
     logging: { level: "error" },
     limits: {
       maxEmailBodyBytes: 1024,
@@ -204,16 +214,16 @@ describe("HTTP routes", () => {
     expect(response?.status).toBe(200);
   });
 
-  it("redirects GET /oauth/start to Google", async () => {
-    const response = await handleHttpRoute(
-      "GET",
-      new URL("http://localhost:3000/oauth/start"),
-      config,
-      createTokenStore(config.google),
-    );
-
-    expect(response?.status).toBe(302);
-    expect(response?.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com/);
+  it("returns 404 for OAuth routes when they are disabled", async () => {
+    for (const path of ["/oauth/start", "/oauth/callback?code=x&state=y"]) {
+      const response = await handleHttpRoute(
+        "GET",
+        new URL(`http://localhost:3000${path}`),
+        config,
+        createTokenStore(config.google),
+      );
+      expect(response?.status).toBe(404);
+    }
   });
 
   it("returns null for unknown routes", async () => {

@@ -7,7 +7,7 @@ A reusable [Model Context Protocol (MCP)](https://modelcontextprotocol.io) serve
 - **Gmail**: create drafts and send emails
 - **Google Docs**: append content to existing documents
 - **Agent-agnostic**: works with Cursor, Claude Desktop, or any MCP client
-- **Secure**: OAuth managed by the server; no tokens in tool inputs
+- **Secure**: bearer-token authentication on the HTTP endpoint; OAuth managed by the server; no tokens in tool inputs
 - **Structured responses**: consistent success/error envelopes
 
 ## Architecture
@@ -23,8 +23,21 @@ MCP Layer → Validation → Services → Auth / Integrations → Google APIs
 | Tool | Side effect | Description |
 |------|-------------|-------------|
 | `gmail_create_draft` | No | Create a Gmail draft without sending |
-| `gmail_send_email` | **Yes** | Send an email immediately |
+| `gmail_send_email` | **Yes** | Send an email immediately. **Disabled by default**; enable via `ENABLED_TOOLS` |
 | `google_docs_append_content` | **Yes** | Append text to the end of a Google Doc |
+
+## Authentication (HTTP transport)
+
+Every MCP request to the HTTP endpoint must carry `Authorization: Bearer <token>`; missing or
+invalid tokens get `401`. The server stores only SHA-256 hashes of tokens and refuses to start in
+`streamable-http` mode without `MCP_AUTH_TOKEN_SHA256`.
+
+```bash
+npm run auth:token   # prints a new token (for the client) and its hash (for the server)
+```
+
+OAuth routes are off by default. See [docs/authentication.md](docs/authentication.md) for Railway
+and client configuration, OAuth-route hardening, and token rotation.
 
 ## Prerequisites
 
@@ -97,6 +110,13 @@ npm start
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `streamable-http` |
 | `MCP_HOST` | No | `127.0.0.1` | HTTP transport host |
 | `MCP_PORT` | No | `3000` | HTTP transport port |
+| `MCP_AUTH_TOKEN_SHA256` | For `streamable-http` | — | Comma-separated SHA-256 hashes of accepted bearer tokens |
+| `ENABLED_TOOLS` | No | `gmail_create_draft,google_docs_append_content` | Tools to register |
+| `ENABLE_OAUTH_ROUTES` | No | `false` | Expose `/oauth/start` and `/oauth/callback` |
+| `OAUTH_ADMIN_TOKEN_SHA256` | If OAuth routes on | — | Hash of the admin token required by `/oauth/start` |
+| `OAUTH_STATE_SECRET` | If OAuth routes on | — | ≥ 32 chars; signs the OAuth `state` |
+| `ALLOWED_GOOGLE_ACCOUNT` | If OAuth routes on | — | Only this Google account may complete OAuth |
+| `GOOGLE_TOKENS_JSON` | No | — | Inline tokens (recommended on Railway) |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
 | `MAX_EMAIL_BODY_BYTES` | No | `1048576` | Max email body size |
 | `MAX_DOC_APPEND_BYTES` | No | `1048576` | Max doc append size |
@@ -188,6 +208,9 @@ docker run -it --env-file .env -v $(pwd)/tokens.json:/app/data/tokens.json googl
 ## Security Considerations
 
 - Never commit `.env` or `tokens.json` — both are gitignored
+- The HTTP endpoint requires a bearer token; only token hashes are configured on the server
+- `gmail_send_email` is not exposed unless explicitly enabled
+- OAuth routes are disabled by default; when enabled they require an admin token, a signed `state`, and the allowed Google account
 - OAuth tokens are never exposed in MCP tool inputs or outputs
 - Email bodies and document content are not logged
 - Use human confirmation before high-impact email sends when appropriate

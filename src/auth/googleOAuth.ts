@@ -13,19 +13,35 @@ export function createOAuth2Client(config: Config["google"]) {
   );
 }
 
-export function getAuthUrl(oauth2Client: ReturnType<typeof createOAuth2Client>): string {
+/** Lets the server learn which Google account completed consent (see the OAuth callback route). */
+export const IDENTITY_SCOPES = ["openid", "email"] as const;
+
+export type AuthUrlOptions = {
+  state?: string;
+  includeIdentity?: boolean;
+};
+
+export function getAuthUrl(
+  oauth2Client: ReturnType<typeof createOAuth2Client>,
+  options: AuthUrlOptions = {},
+): string {
+  const scope: string[] = [...GOOGLE_SCOPES];
+  if (options.includeIdentity) {
+    scope.push(...IDENTITY_SCOPES);
+  }
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [...GOOGLE_SCOPES],
+    scope,
+    ...(options.state ? { state: options.state } : {}),
   });
 }
 
-export async function exchangeCodeForTokens(
-  oauth2Client: ReturnType<typeof createOAuth2Client>,
-  code: string,
-): Promise<StoredTokens> {
-  const { tokens } = await oauth2Client.getToken(code);
+type GoogleTokenResponse = Parameters<
+  ReturnType<typeof createOAuth2Client>["setCredentials"]
+>[0];
+
+function toStoredTokens(tokens: GoogleTokenResponse): StoredTokens {
   if (!tokens.access_token || !tokens.refresh_token) {
     throw new AppError(
       ErrorCode.GOOGLE_AUTH_REQUIRED,
@@ -37,6 +53,35 @@ export async function exchangeCodeForTokens(
     refreshToken: tokens.refresh_token,
     expiryDate: tokens.expiry_date ?? Date.now() + 3600 * 1000,
   };
+}
+
+export async function exchangeCodeForTokens(
+  oauth2Client: ReturnType<typeof createOAuth2Client>,
+  code: string,
+): Promise<StoredTokens> {
+  const { tokens } = await oauth2Client.getToken(code);
+  return toStoredTokens(tokens);
+}
+
+/**
+ * Exchanges the code and returns the tokens together with the verified email of the
+ * Google account that granted consent (null if Google did not return a verified email).
+ */
+export async function exchangeCodeForTokensWithIdentity(
+  oauth2Client: ReturnType<typeof createOAuth2Client>,
+  code: string,
+  clientId: string,
+): Promise<{ tokens: StoredTokens; email: string | null }> {
+  const { tokens } = await oauth2Client.getToken(code);
+  const stored = toStoredTokens(tokens);
+
+  if (!tokens.id_token) {
+    return { tokens: stored, email: null };
+  }
+  const ticket = await oauth2Client.verifyIdToken({ idToken: tokens.id_token, audience: clientId });
+  const payload = ticket.getPayload();
+  const email = payload?.email_verified && payload.email ? payload.email.toLowerCase() : null;
+  return { tokens: stored, email };
 }
 
 export function toGoogleCredentials(tokens: StoredTokens): GoogleCredentials {

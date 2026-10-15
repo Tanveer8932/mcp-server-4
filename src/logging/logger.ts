@@ -9,6 +9,8 @@ const SENSITIVE_KEYS = new Set([
   "access_token",
   "refresh_token",
   "client_secret",
+  "authorization",
+  "token",
   "body",
   "content",
   "bcc",

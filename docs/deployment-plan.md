@@ -159,6 +159,9 @@ Set these in **Railway → Service → Variables**:
 | `MCP_TRANSPORT` | `streamable-http` | Required for Railway |
 | `MCP_HOST` | `0.0.0.0` | Bind all interfaces |
 | `MCP_PORT` | `${{PORT}}` | Railway dynamic port |
+| `MCP_AUTH_TOKEN_SHA256` | `3f1c…` (64 hex) | **Required.** Hash(es) of client bearer tokens from `npm run auth:token`. The server will not start without it. See [authentication.md](authentication.md) |
+
+OAuth routes are **disabled by default**. Prefer `GOOGLE_TOKENS_JSON` (from `npm run tokens:env`) over the Volume file store; enabling the routes additionally requires `ENABLE_OAUTH_ROUTES=true`, `OAUTH_ADMIN_TOKEN_SHA256`, `OAUTH_STATE_SECRET` and `ALLOWED_GOOGLE_ACCOUNT` ([authentication.md](authentication.md#oauth-routes)).
 
 ### Optional
 
@@ -316,13 +319,14 @@ Options:
   "mcpServers": {
     "google-workspace-remote": {
       "url": "https://your-app.up.railway.app",
-      "transport": "streamable-http"
+      "transport": "streamable-http",
+      "headers": { "Authorization": "Bearer <token from npm run auth:token>" }
     }
   }
 }
 ```
 
-Exact schema depends on the MCP client — adjust per client documentation.
+Exact schema depends on the MCP client — adjust per client documentation. Every HTTP client must send the bearer token; requests without it get `401`.
 
 ---
 
@@ -350,6 +354,9 @@ No `railway.toml` is required for a basic deploy, but you may add one later for 
 ## 10. Security Checklist
 
 - [ ] All secrets (`GOOGLE_CLIENT_SECRET`, tokens) stored in Railway Variables or Volume — never in git
+- [ ] `MCP_AUTH_TOKEN_SHA256` set (hashes only); unauthenticated `initialize` returns `401`
+- [ ] `ENABLE_OAUTH_ROUTES` unset/`false` unless actively re-authorizing; `/oauth/start` returns `404`
+- [ ] `gmail_send_email` absent from `tools/list` unless deliberately enabled via `ENABLED_TOOLS`
 - [ ] Railway service is **not** publicly advertised unless intended
 - [ ] Consider Railway **private networking** or access controls if available on your plan
 - [ ] OAuth scopes remain least-privilege (`gmail.compose`, `documents`)

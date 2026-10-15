@@ -15,6 +15,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "auth": "tsx scripts/auth.ts",
+    "auth:token": "tsx scripts/generate-auth-token.ts",
     "tokens:env": "tsx scripts/print-tokens-env.ts",
     "test": "vitest run",
     "test:watch": "vitest",

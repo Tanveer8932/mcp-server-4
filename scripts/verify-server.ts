@@ -7,17 +7,20 @@ import { resolve } from "node:path";
 
 loadDotenv();
 
-const EXPECTED_TOOLS = [
-  "gmail_create_draft",
-  "gmail_send_email",
-  "google_docs_append_content",
-];
+// Default ENABLED_TOOLS; gmail_send_email is opt-in on the server.
+const EXPECTED_TOOLS = ["gmail_create_draft", "google_docs_append_content"];
 
 async function createTransport() {
   const mcpUrl = process.env.MCP_URL?.trim();
   if (mcpUrl) {
     console.log(`Using HTTP transport: ${mcpUrl}`);
-    return new StreamableHTTPClientTransport(new URL(mcpUrl));
+    const token = process.env.MCP_AUTH_TOKEN?.trim();
+    if (!token) {
+      throw new Error("MCP_AUTH_TOKEN is required to verify a remote (HTTP) server.");
+    }
+    return new StreamableHTTPClientTransport(new URL(mcpUrl), {
+      requestInit: { headers: { Authorization: `Bearer ${token}` } },
+    });
   }
 
   const serverPath = resolve("dist/index.js");
@@ -77,7 +80,7 @@ async function main(): Promise<void> {
   if (missing.length > 0) {
     throw new Error(`Missing expected tools: ${missing.join(", ")}`);
   }
-  console.log("\n✓ All 3 expected tools discovered");
+  console.log("\n✓ All expected tools discovered");
 
   const invalidResult = await client.callTool({
     name: "gmail_create_draft",
